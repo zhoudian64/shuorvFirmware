@@ -85,9 +85,11 @@ definitions. */
 	#error freertos_risc_v_chip_specific_extensions.h must define portasmHAS_MTIME to either 1 (MTIME clock present) or 0 (MTIME clock not present).  See https://www.FreeRTOS.org/Using-FreeRTOS-on-RISC-V.html
 #endif
 
+/* I'll do it in ASM
 #ifndef portasmHANDLE_INTERRUPT
 	#error portasmHANDLE_INTERRUPT must be defined to the function to be called to handle external/peripheral interrupts.  portasmHANDLE_INTERRUPT can be defined on the assembler command line or in the appropriate freertos_risc_v_chip_specific_extensions.h header file.  https://www.FreeRTOS.org/Using-FreeRTOS-on-RISC-V.html
 #endif
+*/
 
 #ifndef portasmHAS_SIFIVE_CLINT
 	#define portasmHAS_SIFIVE_CLINT 0
@@ -107,12 +109,14 @@ at the top of this file. */
 .extern ulPortTrapHandler
 .extern vTaskSwitchContext
 .extern xTaskIncrementTick
-.extern Timer_IRQHandler
-.extern pullMachineTimerCompareRegister
-.extern pullNextTime
-.extern uxTimerIncrementsForOneTick /* size_t type so 32-bit on 32-bit core and 64-bits on 64-bit core. */
+# .extern Timer_IRQHandler
+# .extern pullMachineTimerCompareRegister
+# .extern pullNextTime
+# .extern uxTimerIncrementsForOneTick /* size_t type so 32-bit on 32-bit core and 64-bits on 64-bit core. */
 .extern xISRStackTop
-.extern portasmHANDLE_INTERRUPT
+# .extern portasmHANDLE_INTERRUPT
+.extern xPortClearTimerIntPending
+
 
 /*-----------------------------------------------------------*/
 
@@ -167,6 +171,8 @@ test_if_asynchronous:
 
 handle_asynchronous:
 
+// todo: when add keyboard support, do this.
+#if 0
 #if( portasmHAS_MTIME != 0 )
 
 	test_if_mtimer:						/* If there is a CLINT then the mtimer is used to generate the tick interrupt. */
@@ -220,9 +226,14 @@ handle_asynchronous:
 		bne a0, t1, as_yet_unhandled	/* Something as yet unhandled. */
 
 #endif /* portasmHAS_MTIME */
+#endif
 
-	load_x sp, xISRStackTop				/* Switch to ISR stack before function call. */
-	jal portasmHANDLE_INTERRUPT			/* Jump to the interrupt handler if there is no CLINT or if there is a CLINT and it has been determined that an external interrupt is pending. */
+
+	load_x sp, xISRStackTop
+	call xPortClearTimerIntPending
+	jal xTaskIncrementTick
+	begz a0, processed_source
+	jal vTaskSwitchContext
 	j processed_source
 
 handle_synchronous:
